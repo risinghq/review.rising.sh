@@ -23,7 +23,12 @@ const env = (): Env =>
   ({ DB: db, GITHUB_TOKEN: "t", TARGET_REPO: "o/r", TARGET_BASE: "master", TARGET_DIR: "data/transcripts" }) as Env;
 const exported = async () =>
   (await db.prepare("SELECT exported_status AS s FROM chunks ORDER BY id").all<{ s: string | null }>()).results.map((r) => r.s);
-const tree = () => calls.find((c) => c.url.endsWith("/git/trees"))!.body.tree;
+const commit = () => calls.find((c) => c.url.endsWith("/graphql"))!.body.variables.input;
+const tree = (): { path: string; content: string }[] =>
+  commit().fileChanges.additions.map((a: { path: string; contents: string }) => ({
+    path: a.path,
+    content: new TextDecoder().decode(Uint8Array.from(atob(a.contents), (c) => c.charCodeAt(0))),
+  }));
 
 beforeEach(async () => {
   db = memoryD1();
@@ -35,7 +40,7 @@ beforeEach(async () => {
     const body = init.body ? JSON.parse(String(init.body)) : null;
     calls.push({ method: init.method ?? "GET", url, body });
     const answer = url.includes("/git/ref/") ? { object: { sha: "head" } }
-      : url.includes("/git/commits/") ? { tree: { sha: "base" } }
+      : url.endsWith("/graphql") ? { data: { createCommitOnBranch: { commit: { oid: "new" } } } }
       : url.endsWith("/pulls") ? { number: 7 }
       : { sha: "new" };
     return new Response(JSON.stringify(answer));
@@ -70,6 +75,11 @@ describe("exportChanged", () => {
     expect(tree()[0].content).toContain("status: checked");
     expect(tree()[0].content).toContain('reviewers: ["Ana", "Beto"]');
     expect(calls.find((c) => c.url.endsWith("/git/refs"))!.body.ref).toBe("refs/heads/review/20231114221320");
+    expect(commit()).toMatchObject({
+      branch: { repositoryNameWithOwner: "o/r", branchName: "review/20231114221320" },
+      expectedHeadOid: "head",
+    });
+    expect(calls.some((c) => c.url.endsWith("/git/commits"))).toBe(false);
     expect(await exported()).toEqual(["checked"]);
     expect(await exportChanged(env(), 1_700_000_100)).toBeNull();
   });
@@ -89,8 +99,8 @@ describe("exportChanged", () => {
     expect(tree()).toHaveLength(BATCH_MIN);
     expect(tree()[0].content).toContain("status: machine");
     expect(tree()[0].content).toContain("reviewers: []");
-    expect(tree().at(-1).content).toContain("status: blurry");
-    expect(tree().at(-1).content).not.toContain("$m$");
+    expect(tree().at(-1)!.content).toContain("status: blurry");
+    expect(tree().at(-1)!.content).not.toContain("$m$");
   });
 
   it("exports a chunk again when its status changes", async () => {
@@ -109,6 +119,16 @@ describe("exportChanged", () => {
     await check("s/p01-c01");
     vi.stubGlobal("fetch", async () => new Response("no", { status: 403 }));
     await expect(exportChanged(env(), 1)).rejects.toThrow("403");
+    expect(await exported()).toEqual([null]);
+  });
+
+  it("leaves chunks unmarked when GraphQL answers 200 with errors", async () => {
+    await chunk("s/p01-c01");
+    await check("s/p01-c01");
+    vi.stubGlobal("fetch", async (url: string) =>
+      new Response(JSON.stringify(url.endsWith("/graphql") ? { errors: [{ message: "bad oid" }] } : { object: { sha: "head" }, sha: "x" })),
+    );
+    await expect(exportChanged(env(), 1)).rejects.toThrow("bad oid");
     expect(await exported()).toEqual([null]);
   });
 });

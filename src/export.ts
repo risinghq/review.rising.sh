@@ -87,7 +87,8 @@ type Call = (path: string, init?: RequestInit) => Promise<any>;
 
 function github(token: string, repo: string): Call {
   return async (path, init = {}) => {
-    const response = await fetch(`${API}/repos/${repo}${path}`, {
+    const url = path === "/graphql" ? `${API}/graphql` : `${API}/repos/${repo}${path}`;
+    const response = await fetch(url, {
       ...init,
       headers: {
         Accept: "application/vnd.github+json",
@@ -99,27 +100,48 @@ function github(token: string, repo: string): Call {
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error(`GitHub ${init.method ?? "GET"} ${path}: ${response.status}`);
-    return response.json();
+    const body = (await response.json()) as any;
+    if (body.errors) throw new Error(`GitHub ${path}: ${body.errors[0]?.message}`);
+    return body;
   };
 }
 
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
+const base64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+
+const COMMIT = `mutation($input: CreateCommitOnBranchInput!) {
+  createCommitOnBranch(input: $input) { commit { oid } }
+}`;
+
 // Commit the batch to a new branch and open one pull request. Returns its number.
-export async function openPullRequest(call: Call, files: Exported[], base: string, branch: string): Promise<number> {
+// The commit goes through GraphQL because GitHub signs those commits and the
+// target branch requires verified signatures; the git-data API leaves them unsigned.
+export async function openPullRequest(
+  call: Call,
+  repo: string,
+  files: Exported[],
+  base: string,
+  branch: string,
+): Promise<number> {
   const sources = [...new Set(files.map((f) => f.id.split("/")[0]))].join(", ");
   const title = `transcripts: update ${files.length} chunks of ${sources}`;
   const head = (await call(`/git/ref/heads/${base}`)).object.sha as string;
-  const parent = (await call(`/git/commits/${head}`)).tree.sha as string;
-  const tree = await call(
-    "/git/trees",
+  await call("/git/refs", post({ ref: `refs/heads/${branch}`, sha: head }));
+  await call(
+    "/graphql",
     post({
-      base_tree: parent,
-      tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })),
+      query: COMMIT,
+      variables: {
+        input: {
+          branch: { repositoryNameWithOwner: repo, branchName: branch },
+          message: { headline: title },
+          expectedHeadOid: head,
+          fileChanges: { additions: files.map((f) => ({ path: f.path, contents: base64(f.content) })) },
+        },
+      },
     }),
   );
-  const commit = await call("/git/commits", post({ message: title, tree: tree.sha, parents: [head] }));
-  await call("/git/refs", post({ ref: `refs/heads/${branch}`, sha: commit.sha }));
   const pull = await call(
     "/pulls",
     post({
@@ -138,7 +160,7 @@ export async function exportChanged(env: Env, now: number): Promise<number | nul
   const files = await nextBatch(env.DB, env.TARGET_DIR);
   if (files.length === 0) return null;
   const branch = `review/${new Date(now * 1000).toISOString().replace(/\D/g, "").slice(0, 14)}`;
-  const number = await openPullRequest(github(env.GITHUB_TOKEN, env.TARGET_REPO), files, env.TARGET_BASE, branch);
+  const number = await openPullRequest(github(env.GITHUB_TOKEN, env.TARGET_REPO), env.TARGET_REPO, files, env.TARGET_BASE, branch);
   await env.DB.batch(
     files.map((f) => env.DB.prepare("UPDATE chunks SET exported_status = ?2 WHERE id = ?1").bind(f.id, f.status)),
   );

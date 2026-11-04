@@ -24,7 +24,9 @@ Licence: Apache 2.0. Every review is published under it.
   states the status. Once checked, it lists as reviewers the people whose text
   equals the final one. A `blurry` file carries no text. A batch holds at most
   `BATCH_MAX` files and waits for `BATCH_MIN` changes, or for every chunk to be
-  checked. Without `GITHUB_TOKEN` the cron does nothing.
+  checked. The commit is made through GraphQL `createCommitOnBranch`, which
+  GitHub signs; the git-data API would leave it unsigned and `master` requires
+  verified signatures. Without `GITHUB_TOKEN` the cron does nothing.
 
 ## Layout
 
