@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "cloudflare.config.ts"]
+  "include": ["src", "test", "scripts", "cloudflare.config.ts"]
 }
