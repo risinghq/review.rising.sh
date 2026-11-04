@@ -26,7 +26,7 @@ async function api(request: Request, env: Env, path: string, now: number): Promi
   if (path === "/api/me") return reply({ user });
   if (path === "/api/progress") return reply(await progress(env.DB));
   if (!user) return fail(401, "signed_out", "Inicia sesión para revisar.");
-  if (path === "/api/next" && request.method === "GET") return reply({ chunk: await nextChunk(env.DB, user.id) });
+  if (path === "/api/next" && request.method === "GET") return reply({ chunk: await nextChunk(env.DB, user.id, new URL(request.url).searchParams.get("chunk")) });
   if (path === "/api/review" && request.method === "POST") {
     if (!sameOrigin(request)) return fail(403, "origin", "Origen no permitido.");
     if ((await recentReviews(env.DB, user.id, now)) >= Number(env.REVIEWS_PER_MINUTE))

@@ -67,8 +67,13 @@ async function load() {
   who.replaceChildren(progressView(counts.body), ...(user
     ? [user.name, el("button", { className: "ghost", onclick: async () => { await fetch("/auth/logout", { method: "POST" }); location.reload(); } }, "Salir")]
     : []));
+  // A link from the published page names a chunk; it survives the sign-in redirect.
+  const linked = new URLSearchParams(location.search).get("chunk");
+  if (linked) sessionStorage.setItem("chunk", linked);
   if (!user) return showSignIn();
-  const chunk = (await call("/api/next")).body.chunk;
+  const wanted = sessionStorage.getItem("chunk");
+  sessionStorage.removeItem("chunk");
+  const chunk = (await call(wanted ? `/api/next?chunk=${encodeURIComponent(wanted)}` : "/api/next")).body.chunk;
   chunk ? showChunk(chunk) : main.replaceChildren(
     el("div", { className: "card done" }, "No hay más fragmentos por revisar. Gracias."));
 }

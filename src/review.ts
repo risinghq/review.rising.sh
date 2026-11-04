@@ -14,18 +14,21 @@ export interface Chunk {
 
 // Disputed first, then blurry, then a random sample of the agreeing chunks. A
 // chunk with one review comes first within its group, so it reaches two sooner.
-export const nextChunk = (db: D1Database, userId: string) =>
+// A requested chunk (a link from the published page) comes first when it is
+// still open to this reviewer; otherwise the queue decides.
+export const nextChunk = (db: D1Database, userId: string, requested?: string | null) =>
   db
     .prepare(
       `SELECT c.id, c.source, c.page, c.status, c.text, c.alt FROM chunks c
        WHERE c.status != 'checked'
          AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.chunk_id = c.id AND r.user_id = ?1)
-       ORDER BY CASE c.status WHEN 'disputed' THEN 0 WHEN 'blurry' THEN 1 ELSE 2 END,
+       ORDER BY c.id = ?2 DESC,
+                CASE c.status WHEN 'disputed' THEN 0 WHEN 'blurry' THEN 1 ELSE 2 END,
                 (SELECT COUNT(*) FROM reviews r WHERE r.chunk_id = c.id) DESC,
                 RANDOM()
        LIMIT 1`,
     )
-    .bind(userId)
+    .bind(userId, requested ?? "")
     .first<Chunk>();
 
 export const progress = (db: D1Database) =>

@@ -63,4 +63,13 @@ describe("nextChunk", () => {
     expect((await nextChunk(db, "ana"))?.id).toBe("s/p01-c02");
     expect((await nextChunk(db, "beto"))?.id).toBe("s/p01-c03");
   });
+
+  it("serves a requested chunk first unless it is checked or already reviewed by the user", async () => {
+    await chunk("s/p01-c01", "machine");
+    await chunk("s/p01-c02", "disputed");
+    expect((await nextChunk(db, "ana", "s/p01-c01"))?.id).toBe("s/p01-c01");
+    await submit(db, "ana", "s/p01-c01", "$m$", "a", 1);
+    expect((await nextChunk(db, "ana", "s/p01-c01"))?.id).toBe("s/p01-c02");
+    expect((await nextChunk(db, "ana", "s/missing"))?.id).toBe("s/p01-c02");
+  });
 });
