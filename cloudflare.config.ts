@@ -1,4 +1,4 @@
-import { bindings, defineConfig } from "cf/config";
+import { bindings, defineConfig, triggers } from "cf/config";
 
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 import { WORKER_FIRST } from "./src/routes.ts";
@@ -17,6 +17,8 @@ export default defineConfig({
       logs: { enabled: true, invocationLogs: false },
     },
     assets: { runWorkerFirst: WORKER_FIRST },
+    // Hourly: open a pull request with the chunks checked since the last one.
+    triggers: [triggers.scheduled({ schedule: "17 * * * *" })],
     env: {
       ASSETS: bindings.assets(),
       DB: bindings.d1({ name: "review" }),
@@ -25,6 +27,10 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: bindings.secret(),
       GITHUB_CLIENT_ID: bindings.secret(),
       GITHUB_CLIENT_SECRET: bindings.secret(),
+      GITHUB_TOKEN: bindings.secret(),
+      TARGET_REPO: bindings.text("caefisica/caefisica.com"),
+      TARGET_BASE: bindings.text("master"),
+      TARGET_DIR: bindings.text("data/transcripts"),
       SESSION_DAYS: bindings.text("30"),
       REVIEWS_PER_MINUTE: bindings.text("20"),
     },

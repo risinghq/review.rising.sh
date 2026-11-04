@@ -32,7 +32,8 @@ CREATE TABLE chunks (
   text      TEXT NOT NULL,
   alt       TEXT,
   sharpness REAL NOT NULL,
-  agreement REAL NOT NULL
+  agreement REAL NOT NULL,
+  exported_pr INTEGER                  -- pull request that carried the checked text to git
 ) WITHOUT ROWID;
 
 -- A review is a person's final text for a chunk. `choice` records whether they

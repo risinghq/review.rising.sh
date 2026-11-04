@@ -1,6 +1,7 @@
 import { currentUser } from "./account.ts";
 import { handleAuth } from "./auth.ts";
 import type { Env } from "./env.ts";
+import { exportChecked } from "./export.ts";
 import { fail, reply, sameOrigin } from "./http.ts";
 import { MAX_TEXT_CHARS, nextChunk, progress, recentReviews, submit } from "./review.ts";
 
@@ -58,5 +59,8 @@ export default {
     if (pathname.startsWith("/api/")) return api(request, env, pathname, now);
     if (pathname.startsWith("/scan/")) return scan(request, env, pathname, now);
     return env.ASSETS.fetch(request);
+  },
+  async scheduled(_controller, env): Promise<void> {
+    await exportChecked(env, unixNow());
   },
 } satisfies ExportedHandler<Env>;

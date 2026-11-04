@@ -18,6 +18,11 @@ Licence: Apache 2.0. Every review is published under it.
   after normalisation (`src/text.ts`). Agreement of the machine readings is not
   accuracy, so no chunk starts `checked`.
 - A reviewer is limited to `REVIEWS_PER_MINUTE` reviews.
+- An hourly cron (`src/export.ts`) opens one pull request on `TARGET_REPO` with
+  the checked chunks no pull request carries yet, as
+  `TARGET_DIR/<source>/pXX-cYY.md`. Each file lists as reviewers the people whose
+  text equals the final one. A batch waits for `BATCH_MIN` chunks, or for the
+  queue to empty. Without `GITHUB_TOKEN` the cron does nothing.
 
 ## Layout
 
@@ -44,7 +49,8 @@ bunx cf deploy --profile risinghq --secrets-file FILE
 ```
 
 `FILE` holds `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` and
-`GITHUB_CLIENT_SECRET`. Pass it only when a secret changes. Each OAuth client
+`GITHUB_CLIENT_SECRET`, and `GITHUB_TOKEN` for the export: a fine-grained token
+with Contents and Pull requests write on `TARGET_REPO`. Pass it only when a secret changes. Each OAuth client
 must list `https://review.rising.sh/auth/<provider>/callback`.
 
 ## Load chunks
