@@ -52,21 +52,34 @@ function render(text, target) {
   }
 }
 
+function progressView(counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (!total) return "";
+  const checked = counts.checked ?? 0;
+  return el("div", { className: "progress", title: "Fragmentos confirmados por dos personas" },
+    `${checked} de ${total} confirmados`,
+    el("div", { className: "bar" }, el("i", { style: `width:${(100 * checked) / total}%` })));
+}
+
 async function load() {
-  const user = (await call("/api/me")).body.user;
-  who.replaceChildren(user ? el("span", {}, user.name, " ",
-    el("button", { onclick: async () => { await fetch("/auth/logout", { method: "POST" }); location.reload(); } }, "Salir")) : "");
+  const [me, counts] = await Promise.all([call("/api/me"), call("/api/progress")]);
+  const user = me.body.user;
+  who.replaceChildren(progressView(counts.body), ...(user
+    ? [user.name, el("button", { className: "ghost", onclick: async () => { await fetch("/auth/logout", { method: "POST" }); location.reload(); } }, "Salir")]
+    : []));
   if (!user) return showSignIn();
   const chunk = (await call("/api/next")).body.chunk;
-  chunk ? showChunk(chunk) : main.replaceChildren(el("p", {}, "No hay más fragmentos por revisar. Gracias."));
+  chunk ? showChunk(chunk) : main.replaceChildren(
+    el("div", { className: "card done" }, "No hay más fragmentos por revisar. Gracias."));
 }
 
 function showSignIn() {
-  main.replaceChildren(
+  main.replaceChildren(el("div", { className: "card welcome" },
+    el("h2", {}, "Revisa unos apuntes"),
     el("p", {}, "Compara el escaneo de unos apuntes manuscritos con su transcripción automática y corrige lo que esté mal. No necesitas saber de git."),
-    el("p", {}, el("a", { className: "btn", href: "/auth/google" }, "Entrar con Google"), " ",
-      el("a", { className: "btn", href: "/auth/github" }, "Entrar con GitHub")),
-  );
+    el("div", { className: "actions" },
+      el("a", { className: "btn", href: "/auth/google" }, "Entrar con Google"),
+      el("a", { className: "btn", href: "/auth/github" }, "Entrar con GitHub"))));
 }
 
 const WHY = { disputed: "las dos lecturas difieren", blurry: "escaneo borroso", machine: "muestra de control" };
@@ -74,8 +87,8 @@ const WHY = { disputed: "las dos lecturas difieren", blurry: "escaneo borroso", 
 function showChunk(chunk) {
   const editor = el("textarea", { value: chunk.text, spellcheck: false });
   const preview = el("div", { className: "preview" });
-  const message = el("p", { className: "note" });
-  const choices = el("div", { className: "choices" });
+  const message = el("p", { className: "error" });
+  const choices = el("div", { className: "row" });
   let choice = "a";
   const draw = () => render(editor.value, preview);
   const pick = (which, text) => { editor.value = text; draw(); choice = which; };
@@ -84,8 +97,10 @@ function showChunk(chunk) {
   let diff = "";
   if (chunk.alt) {
     const [left, right] = wordDiff(chunk.text, chunk.alt);
-    diff = el("div", { className: "pair" },
-      el("div", {}, el("b", {}, "Lectura A"), left), el("div", {}, el("b", {}, "Lectura B"), right));
+    diff = el("details", { className: "card readings", open: true }, el("summary", {}, "Qué difiere entre las dos lecturas"),
+      el("div", { className: "pair" },
+        el("div", {}, el("div", { className: "label" }, "Lectura A"), left),
+        el("div", {}, el("div", { className: "label" }, "Lectura B"), right)));
     choices.append(el("button", { onclick: () => pick("a", chunk.text) }, "Usar A"),
       el("button", { onclick: () => pick("b", chunk.alt) }, "Usar B"));
   }
@@ -101,12 +116,19 @@ function showChunk(chunk) {
     send.disabled = false;
   } }, "Enviar y seguir");
 
+  editor.onkeydown = (event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) send.click(); };
   main.replaceChildren(
-    el("p", { className: "note" }, `Página ${chunk.page} · ${WHY[chunk.status]}`),
+    el("div", { className: "meta" }, `Página ${chunk.page}`, el("span", { className: "tag" }, WHY[chunk.status])),
     el("div", { className: "pair" },
-      el("div", { className: "scan" }, el("img", { src: `/scan/${chunk.id}`, alt: "Escaneo del fragmento" })),
-      el("div", {}, editor, el("p", { className: "note" }, "Vista previa"), preview, choices, send, " ",
-        el("button", { onclick: load }, "Otro"), message)),
+      el("div", { className: "card scan" }, el("img", { src: `/scan/${chunk.id}`, alt: "Escaneo del fragmento" })),
+      el("div", { className: "card work" },
+        el("div", {}, el("label", {}, "Transcripción"), editor),
+        el("div", {}, el("div", { className: "label" }, "Vista previa"), preview),
+        choices, message,
+        el("div", { className: "row" },
+          send,
+          el("button", { className: "ghost", onclick: load }, "Omitir"),
+          el("span", { className: "label grow", style: "text-align:right;margin:0" }, "Ctrl + Enter envía")))),
     diff,
   );
   draw();
