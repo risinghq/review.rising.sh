@@ -1,0 +1,14 @@
+body{font:16px/1.5 system-ui,sans-serif;margin:0;color:#1b1b1b;background:#fafafa}
+header,footer{padding:.75rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}
+header h1{font-size:1.1rem;margin:0}footer{font-size:.8rem;color:#555}
+main{max-width:70rem;margin:0 auto;padding:1rem}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:800px){.pair{grid-template-columns:1fr}}
+.scan img{width:100%;border:1px solid #ccc;background:#fff}
+textarea{width:100%;min-height:9rem;font:14px/1.4 ui-monospace,monospace;box-sizing:border-box}
+.preview{border:1px solid #ddd;background:#fff;padding:.5rem;min-height:2rem;overflow-x:auto}
+.choices{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}
+button,.btn{padding:.5rem .9rem;border:1px solid #555;background:#fff;border-radius:6px;cursor:pointer;font:inherit;text-decoration:none;color:inherit}
+button.primary{background:#1b1b1b;color:#fff}
+del{background:#fdd}ins{background:#dfd;text-decoration:none}
+.note{color:#555;font-size:.9rem}
