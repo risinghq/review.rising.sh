@@ -19,10 +19,12 @@ Licence: Apache 2.0. Every review is published under it.
   accuracy, so no chunk starts `checked`.
 - A reviewer is limited to `REVIEWS_PER_MINUTE` reviews.
 - An hourly cron (`src/export.ts`) opens one pull request on `TARGET_REPO` with
-  the checked chunks no pull request carries yet, as
-  `TARGET_DIR/<source>/pXX-cYY.md`. Each file lists as reviewers the people whose
-  text equals the final one. A batch waits for `BATCH_MIN` chunks, or for the
-  queue to empty. Without `GITHUB_TOKEN` the cron does nothing.
+  every chunk whose status differs from the one last exported
+  (`chunks.exported_status`), as `TARGET_DIR/<source>/pXX-cYY.md`. The file
+  states the status. Once checked, it lists as reviewers the people whose text
+  equals the final one. A `blurry` file carries no text. A batch holds at most
+  `BATCH_MAX` files and waits for `BATCH_MIN` changes, or for every chunk to be
+  checked. Without `GITHUB_TOKEN` the cron does nothing.
 
 ## Layout
 

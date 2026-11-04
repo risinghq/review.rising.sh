@@ -1,7 +1,7 @@
 import { currentUser } from "./account.ts";
 import { handleAuth } from "./auth.ts";
 import type { Env } from "./env.ts";
-import { exportChecked } from "./export.ts";
+import { exportChanged } from "./export.ts";
 import { fail, reply, sameOrigin } from "./http.ts";
 import { MAX_TEXT_CHARS, nextChunk, progress, recentReviews, submit } from "./review.ts";
 
@@ -61,6 +61,6 @@ export default {
     return env.ASSETS.fetch(request);
   },
   async scheduled(_controller, env): Promise<void> {
-    await exportChecked(env, unixNow());
+    await exportChanged(env, unixNow());
   },
 } satisfies ExportedHandler<Env>;

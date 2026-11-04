@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../src/env.ts";
-import { exportChecked, renderChunk } from "../src/export.ts";
+import { BATCH_MIN, exportChanged, renderChunk } from "../src/export.ts";
 import { submit } from "../src/review.ts";
 import { memoryD1 } from "./d1.ts";
 
@@ -21,6 +21,9 @@ const check = async (id: string) => {
 };
 const env = (): Env =>
   ({ DB: db, GITHUB_TOKEN: "t", TARGET_REPO: "o/r", TARGET_BASE: "master", TARGET_DIR: "data/transcripts" }) as Env;
+const exported = async () =>
+  (await db.prepare("SELECT exported_status AS s FROM chunks ORDER BY id").all<{ s: string | null }>()).results.map((r) => r.s);
+const tree = () => calls.find((c) => c.url.endsWith("/git/trees"))!.body.tree;
 
 beforeEach(async () => {
   db = memoryD1();
@@ -41,41 +44,71 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("renderChunk", () => {
+  const base = { id: "s/p01-c01", source: "s", page: 1, status: "checked", text: "$x$\n", sharpness: 30, agreement: 1 };
+
   it("lists each reviewer once, in order", () => {
-    const text = renderChunk({ id: "s/p01-c01", source: "s", page: 1, text: "$x$\n", sharpness: 30, agreement: 1 }, ["Beto", "Ana", "Beto"]);
+    const text = renderChunk(base, ["Beto", "Ana", "Beto"]);
     expect(text).toContain('reviewers: ["Ana", "Beto"]');
     expect(text.endsWith("---\n$x$\n")).toBe(true);
   });
+
+  it("publishes no text for a blurry chunk", () => {
+    const text = renderChunk({ ...base, status: "blurry", text: "garbage" }, []);
+    expect(text).toContain("status: blurry");
+    expect(text).not.toContain("garbage");
+  });
 });
 
-describe("exportChecked", () => {
-  it("opens one pull request when nothing is left to review and marks the chunks", async () => {
+describe("exportChanged", () => {
+  const ids = Array.from({ length: BATCH_MIN }, (_, i) => `s/p01-c${String(i).padStart(2, "0")}`);
+
+  it("opens one pull request when every chunk is checked and marks the chunks", async () => {
     await chunk("s/p01-c01");
     await check("s/p01-c01");
-    expect(await exportChecked(env(), 1_700_000_000)).toBe(7);
-    const tree = calls.find((c) => c.url.endsWith("/git/trees"))!.body;
-    expect(tree.tree[0].path).toBe("data/transcripts/s/p01-c01.md");
-    expect(tree.tree[0].content).toContain('reviewers: ["Ana", "Beto"]');
+    expect(await exportChanged(env(), 1_700_000_000)).toBe(7);
+    expect(tree()[0].path).toBe("data/transcripts/s/p01-c01.md");
+    expect(tree()[0].content).toContain("status: checked");
+    expect(tree()[0].content).toContain('reviewers: ["Ana", "Beto"]');
     expect(calls.find((c) => c.url.endsWith("/git/refs"))!.body.ref).toBe("refs/heads/review/20231114221320");
-    const row = await db.prepare("SELECT exported_pr FROM chunks").first<{ exported_pr: number }>();
-    expect(row?.exported_pr).toBe(7);
-    expect(await exportChecked(env(), 1_700_000_100)).toBeNull();
+    expect(await exported()).toEqual(["checked"]);
+    expect(await exportChanged(env(), 1_700_000_100)).toBeNull();
   });
 
-  it("waits while few chunks are checked and others remain open", async () => {
+  it("waits while few chunks changed and others remain unchecked", async () => {
     await chunk("s/p01-c01");
     await chunk("s/p01-c02");
     await check("s/p01-c01");
-    expect(await exportChecked(env(), 1)).toBeNull();
+    expect(await exportChanged(env(), 1)).toBeNull();
     expect(calls).toEqual([]);
+  });
+
+  it("publishes unreviewed chunks with their status", async () => {
+    for (const id of ids.slice(0, -1)) await chunk(id, "machine");
+    await chunk(ids.at(-1)!, "blurry");
+    expect(await exportChanged(env(), 1)).toBe(7);
+    expect(tree()).toHaveLength(BATCH_MIN);
+    expect(tree()[0].content).toContain("status: machine");
+    expect(tree()[0].content).toContain("reviewers: []");
+    expect(tree().at(-1).content).toContain("status: blurry");
+    expect(tree().at(-1).content).not.toContain("$m$");
+  });
+
+  it("exports a chunk again when its status changes", async () => {
+    for (const id of ids) await chunk(id);
+    await exportChanged(env(), 1);
+    expect(await exported()).toEqual(ids.map(() => "disputed"));
+    for (const id of ids) await check(id);
+    calls.length = 0;
+    expect(await exportChanged(env(), 2)).toBe(7);
+    expect(tree()[0].content).toContain("status: checked");
+    expect(await exported()).toEqual(ids.map(() => "checked"));
   });
 
   it("leaves chunks unmarked when GitHub refuses", async () => {
     await chunk("s/p01-c01");
     await check("s/p01-c01");
     vi.stubGlobal("fetch", async () => new Response("no", { status: 403 }));
-    await expect(exportChecked(env(), 1)).rejects.toThrow("403");
-    const row = await db.prepare("SELECT exported_pr FROM chunks").first<{ exported_pr: number | null }>();
-    expect(row?.exported_pr).toBeNull();
+    await expect(exportChanged(env(), 1)).rejects.toThrow("403");
+    expect(await exported()).toEqual([null]);
   });
 });
