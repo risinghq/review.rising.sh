@@ -30,7 +30,7 @@ export default defineConfig({
       GITHUB_TOKEN: bindings.secret(),
       TARGET_REPO: bindings.text("caefisica/caefisica.com"),
       TARGET_BASE: bindings.text("master"),
-      TARGET_DIR: bindings.text("data/transcripts"),
+      TARGET_DIR: bindings.text("content/apuntes/física-estadística/landi"),
       SESSION_DAYS: bindings.text("30"),
       REVIEWS_PER_MINUTE: bindings.text("20"),
     },
